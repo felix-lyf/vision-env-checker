@@ -1,6 +1,6 @@
 """
-环境检测服务模块
-基于原有 C# EnvironmentCheckerService 重构
+Vision Env Checker - 检测服务模块 V2.0
+一键检测 + 快捷修复
 """
 
 import os
@@ -28,10 +28,13 @@ class CheckItem:
     description: str
     status: CheckStatus
     index: int = 0
+    fix_command: str = ""  # 修复命令
+    fix_suggestion: str = ""  # 修复建议
+    settings_url: str = ""  # 设置页面URL或命令
 
 
 class CheckerService:
-    """环境检测服务"""
+    """环境检测服务 V2.0"""
     
     def __init__(self):
         self.results: List[CheckItem] = []
@@ -39,11 +42,13 @@ class CheckerService:
     def check_vision_plus_installation(self) -> CheckItem:
         """检查 VisionPlus 软件是否安装"""
         is_installed = False
+        install_path = ""
         
         # 检查进程
         try:
             for proc in psutil.process_iter(['name']):
-                if 'VisionPlus' in proc.info['name'] or 'visionplus' in proc.info['name'].lower():
+                proc_name = proc.info.get('name', '') or ''
+                if 'VisionPlus' in proc_name or 'visionplus' in proc_name.lower():
                     is_installed = True
                     break
         except:
@@ -52,363 +57,303 @@ class CheckerService:
         # 检查常见安装路径
         if not is_installed:
             possible_paths = [
-                r"C:\Program Files\VisionPlus",
-                r"C:\Program Files (x86)\VisionPlus",
-                r"C:\VisionPlus",
-                "/opt/visionplus",
-                "/usr/local/visionplus",
+                (r"C:\Program Files\VisionPlus", "VisionPlus"),
+                (r"C:\Program Files (x86)\VisionPlus", "VisionPlus"),
+                (r"C:\VisionPlus", "VisionPlus"),
+                (r"C:\Program Files\TEVisionPlus", "TEVisionPlus"),
+                (r"C:\Program Files (x86)\TEVisionPlus", "TEVisionPlus"),
             ]
-            for path in possible_paths:
+            for path, name in possible_paths:
                 if os.path.exists(path):
                     is_installed = True
+                    install_path = path
                     break
         
-        return CheckItem(
-            title="VisionPlus软件安装检查",
-            description="VisionPlus软件已正确安装" if is_installed else "未检测到VisionPlus软件",
-            status=CheckStatus.SUCCESS if is_installed else CheckStatus.ERROR
-        )
-    
-    def check_system_requirements(self) -> CheckItem:
-        """检查系统配置要求"""
-        meets_requirements = True
-        issues = []
-        
-        try:
-            # 检查内存（至少4GB）
-            memory = psutil.virtual_memory()
-            total_gb = memory.total / (1024 ** 3)
-            if total_gb < 4:
-                meets_requirements = False
-                issues.append(f"内存不足: {total_gb:.1f}GB (需要≥4GB)")
-            
-            # 检查磁盘空间（至少10GB可用）
-            disk = psutil.disk_usage('/')
-            free_gb = disk.free / (1024 ** 3)
-            if free_gb < 10:
-                meets_requirements = False
-                issues.append(f"磁盘空间不足: {free_gb:.1f}GB可用 (需要≥10GB)")
-            
-            # 检查CPU核心数
-            cpu_count = psutil.cpu_count(logical=False)
-            if cpu_count < 2:
-                meets_requirements = False
-                issues.append(f"CPU核心数不足: {cpu_count}核 (建议≥4核)")
-                
-        except Exception as e:
+        if is_installed:
             return CheckItem(
-                title="系统配置要求检查",
-                description=f"无法检测系统配置: {str(e)}",
-                status=CheckStatus.ERROR
+                title="VisionPlus软件安装",
+                description=f"VisionPlus已安装在: {install_path}" if install_path else "VisionPlus已正确安装",
+                status=CheckStatus.SUCCESS
             )
-        
-        if meets_requirements:
-            description = f"✓ 内存: {total_gb:.1f}GB | ✓ 磁盘: {free_gb:.1f}GB可用 | ✓ CPU: {cpu_count}核"
-            status = CheckStatus.SUCCESS
         else:
-            description = "; ".join(issues)
-            status = CheckStatus.WARNING
-            
-        return CheckItem(
-            title="系统配置要求检查",
-            description=description,
-            status=status
-        )
-    
-    def check_network_ip_config(self) -> CheckItem:
-        """检查网卡IP配置"""
-        has_conflict = False
-        ip_addresses = []
-        
-        try:
-            # 获取所有网络接口
-            interfaces = psutil.net_if_addrs()
-            for interface_name, addrs in interfaces.items():
-                for addr in addrs:
-                    # 只检查 IPv4 地址
-                    if addr.family == 2:  # AF_INET
-                        ip_addresses.append(addr.address)
-            
-            # 检查是否有重复IP（简化检查，实际IP冲突需要更复杂的检测）
-            if len(ip_addresses) != len(set(ip_addresses)):
-                has_conflict = True
-                
-        except Exception as e:
             return CheckItem(
-                title="网卡IP配置检查",
-                description=f"检测失败: {str(e)}",
-                status=CheckStatus.ERROR
+                title="VisionPlus软件安装",
+                description="未检测到VisionPlus软件，请安装视觉检测软件",
+                status=CheckStatus.ERROR,
+                fix_suggestion="请联系管理员安装VisionPlus或TEVisionPlus软件",
+                settings_url="explorer.exe C:\\"
             )
-        
-        return CheckItem(
-            title="网卡IP配置检查",
-            description=f"IP配置正常，发现 {len(ip_addresses)} 个网络接口" if not has_conflict else "检测到IP地址可能冲突",
-            status=CheckStatus.ERROR if has_conflict else CheckStatus.SUCCESS
-        )
-    
-    def check_network_driver(self) -> CheckItem:
-        """检查网卡驱动"""
-        all_drivers_ok = True
-        up_count = 0
-        total_count = 0
-        
-        try:
-            # 获取网络接口统计
-            interfaces = psutil.net_if_stats()
-            for name, stats in interfaces.items():
-                # 排除回环接口
-                if 'lo' not in name.lower() and 'loopback' not in name.lower():
-                    total_count += 1
-                    if stats.isup:
-                        up_count += 1
-            
-            if total_count == 0:
-                all_drivers_ok = False
-            elif up_count < total_count:
-                all_drivers_ok = False
-                
-        except Exception as e:
-            return CheckItem(
-                title="网卡驱动检查",
-                description=f"检测失败: {str(e)}",
-                status=CheckStatus.ERROR
-            )
-        
-        return CheckItem(
-            title="网卡驱动检查",
-            description=f"网卡驱动正常 ({up_count}/{total_count} 个接口在线)" if all_drivers_ok else f"部分网卡异常 ({up_count}/{total_count} 个接口在线)",
-            status=CheckStatus.SUCCESS if all_drivers_ok else CheckStatus.WARNING
-        )
-    
-    def check_network_parameters(self) -> CheckItem:
-        """检查网卡参数配置"""
-        needs_adjustment = False
-        issues = []
-        
-        try:
-            # 检查 MTU 设置
-            interfaces = psutil.net_if_stats()
-            for name, stats in interfaces.items():
-                if 'lo' not in name.lower():
-                    # 检查网卡速度
-                    if hasattr(stats, 'speed') and stats.speed:
-                        if stats.speed < 100:  # 小于100Mbps
-                            needs_adjustment = True
-                            issues.append(f"{name}: 速度较低 ({stats.speed}Mbps)")
-        except:
-            pass
-        
-        return CheckItem(
-            title="网卡参数配置检查",
-            description="; ".join(issues) if needs_adjustment else "网卡参数配置正常",
-            status=CheckStatus.WARNING if needs_adjustment else CheckStatus.SUCCESS
-        )
-    
-    def check_firewall(self) -> CheckItem:
-        """检查防火墙状态"""
-        firewall_enabled = False
-        
-        try:
-            if platform.system() == "Windows":
-                # Windows 防火墙检查
-                result = subprocess.run(
-                    ["netsh", "advfirewall", "show", "currentprofile"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                firewall_enabled = "State ON" in result.stdout or "状态 启用" in result.stdout
-            elif platform.system() == "Linux":
-                # 检查 ufw 或 firewalld
-                for cmd in ["ufw", "firewalld", "iptables"]:
-                    result = subprocess.run(
-                        ["systemctl", "is-active", cmd],
-                        capture_output=True,
-                        text=True,
-                        timeout=3
-                    )
-                    if result.returncode == 0:
-                        firewall_enabled = True
-                        break
-        except:
-            pass
-        
-        return CheckItem(
-            title="防火墙检查",
-            description="防火墙已启用，建议关闭或配置例外" if firewall_enabled else "防火墙未启用",
-            status=CheckStatus.WARNING if firewall_enabled else CheckStatus.SUCCESS
-        )
-    
-    def check_antivirus(self) -> CheckItem:
-        """检查杀毒软件"""
-        antivirus_list = []
-        
-        try:
-            if platform.system() == "Windows":
-                # 检查 Windows Security Center
-                result = subprocess.run(
-                    ["powershell", "-Command", 
-                     "Get-WmiObject -Namespace 'root\\SecurityCenter2' -Class AntiVirusProduct | Select-Object displayName"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                # 简单解析输出
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    if line.strip() and '---' not in line and 'displayName' not in line:
-                        antivirus_list.append(line.strip())
-            
-            # 检查常见进程
-            antivirus_processes = ['360', 'avast', 'avira', 'mcafee', 'kaspersky', 
-                                  'symantec', 'norton', 'trend', 'eset', 'comodo']
-            for proc in psutil.process_iter(['name']):
-                proc_name = proc.info['name'].lower()
-                for av in antivirus_processes:
-                    if av in proc_name:
-                        antivirus_list.append(proc.info['name'])
-                        break
-                        
-        except:
-            pass
-        
-        has_antivirus = len(antivirus_list) > 0
-        unique_antivirus = list(set(antivirus_list))[:3]  # 最多显示3个
-        
-        return CheckItem(
-            title="杀毒软件检查",
-            description=f"检测到: {', '.join(unique_antivirus)}" if has_antivirus else "未检测到第三方杀毒软件",
-            status=CheckStatus.WARNING if has_antivirus else CheckStatus.SUCCESS
-        )
     
     def check_camera_drivers(self) -> CheckItem:
-        """检查相机驱动（新增）"""
-        camera_types = []
+        """检查相机驱动是否安装"""
+        camera_sdks = []
+        missing_drivers = []
         
+        # 检查常见相机SDK路径
+        sdk_paths = [
+            (r"C:\Program Files\Basler\pylon 5", "Basler Pylon 5"),
+            (r"C:\Program Files\Basler\pylon 6", "Basler Pylon 6"),
+            (r"C:\Program Files\Basler\pylon 7", "Basler Pylon 7"),
+            (r"C:\Program Files (x86)\Basler\pylon 5", "Basler Pylon 5"),
+            (r"C:\Program Files\HIKVISION\MVS", "海康 MVS"),
+            (r"C:\Program Files (x86)\HIKVISION\MVS", "海康 MVS"),
+            (r"C:\Program Files\Daheng Imavision\GalaxySDK", "大华 Galaxy"),
+            (r"C:\Program Files (x86)\Daheng Imavision\GalaxySDK", "大华 Galaxy"),
+            (r"C:\Program Files\FLIR Systems\Spinnaker", "FLIR Spinnaker"),
+            (r"C:\Program Files\GenICam", "GenICam"),
+        ]
+        
+        for path, name in sdk_paths:
+            if os.path.exists(path):
+                if name not in camera_sdks:
+                    camera_sdks.append(name)
+        
+        # 检查设备管理器中的相机设备
         try:
-            if platform.system() == "Windows":
-                # 检查常见的相机 SDK 是否安装
-                sdk_paths = [
-                    (r"C:\Program Files\Basler\pylon 5", "Basler Pylon"),
-                    (r"C:\Program Files\Basler\pylon 6", "Basler Pylon 6"),
-                    (r"C:\Program Files\HIKVISION\MVS", "海康 MVS"),
-                    (r"C:\Program Files (x86)\HIKVISION\MVS", "海康 MVS"),
-                    (r"C:\Program Files\Daheng Imavision\GalaxySDK", "大华 Galaxy"),
-                    (r"C:\Program Files\FLIR Systems\Spinnaker", "FLIR Spinnaker"),
-                ]
-                
-                for path, name in sdk_paths:
-                    if os.path.exists(path):
-                        camera_types.append(name)
-        except:
-            pass
-        
-        has_camera_sdk = len(camera_types) > 0
-        
-        return CheckItem(
-            title="相机驱动检查",
-            description=f"已安装: {', '.join(camera_types)}" if has_camera_sdk else "未检测到相机SDK，建议安装Basler/海康/大华等驱动",
-            status=CheckStatus.SUCCESS if has_camera_sdk else CheckStatus.WARNING
-        )
-    
-    def check_cuda(self) -> CheckItem:
-        """检查 CUDA 环境（新增）"""
-        cuda_version = None
-        
-        try:
-            # 尝试运行 nvcc
             result = subprocess.run(
-                ["nvcc", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["powershell", "-Command", "Get-PnpDevice | Where-Object {$_.FriendlyName -like '*camera*' -or $_.FriendlyName -like '*Basler*' -or $_.FriendlyName -like '*HIK*'} | Select-Object FriendlyName, Status"],
+                capture_output=True, text=True, timeout=10, shell=True
             )
-            if result.returncode == 0:
-                # 解析 CUDA 版本
-                match = re.search(r"release (\d+\.\d+)", result.stdout)
-                if match:
-                    cuda_version = match.group(1)
+            if "OK" in result.stdout or "正常" in result.stdout:
+                pass  # 设备正常
         except:
             pass
         
-        # 检查环境变量
-        if not cuda_version:
-            cuda_path = os.environ.get('CUDA_PATH', '')
-            if cuda_path and os.path.exists(cuda_path):
-                cuda_version = "已安装（版本未知）"
-        
-        return CheckItem(
-            title="CUDA环境检查",
-            description=f"CUDA {cuda_version} 已安装" if cuda_version else "未检测到CUDA，深度学习功能可能受限",
-            status=CheckStatus.SUCCESS if cuda_version else CheckStatus.WARNING
-        )
+        if camera_sdks:
+            return CheckItem(
+                title="相机驱动",
+                description=f"已安装: {', '.join(camera_sdks)}",
+                status=CheckStatus.SUCCESS
+            )
+        else:
+            return CheckItem(
+                title="相机驱动",
+                description="未检测到相机SDK，视觉系统可能无法正常工作",
+                status=CheckStatus.ERROR,
+                fix_suggestion="请安装以下相机驱动之一：\n1. Basler Pylon\n2. 海康 MVS\n3. 大华 Galaxy",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
     
-    def check_gpu(self) -> CheckItem:
-        """检查 GPU（新增）"""
-        gpu_info = []
+    def check_firewall(self) -> CheckItem:
+        """检查 Windows 防火墙是否关闭"""
+        is_enabled = False
         
         try:
-            if platform.system() == "Windows":
-                # 使用 wmic 获取 GPU 信息
-                result = subprocess.run(
-                    ["wmic", "path", "win32_VideoController", "get", "name"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                lines = result.stdout.strip().split('\n')[1:]  # 跳过标题
-                for line in lines:
-                    if line.strip():
-                        gpu_info.append(line.strip())
-            else:
-                # Linux 使用 lspci
-                result = subprocess.run(
-                    ["lspci"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                for line in result.stdout.split('\n'):
-                    if 'VGA' in line or '3D controller' in line:
-                        gpu_info.append(line.split(':')[-1].strip())
+            # 检查 Windows 防火墙状态
+            result = subprocess.run(
+                ["netsh", "advfirewall", "show", "currentprofile"],
+                capture_output=True, text=True, timeout=5, shell=True
+            )
+            output = result.stdout
+            
+            if "State ON" in output or "状态 启用" in output or "ON" in output:
+                is_enabled = True
         except:
             pass
         
-        has_gpu = len(gpu_info) > 0 and not all('Intel' in g for g in gpu_info)
+        if is_enabled:
+            return CheckItem(
+                title="Windows防火墙",
+                description="防火墙已启用，可能阻止相机通信",
+                status=CheckStatus.WARNING,
+                fix_suggestion="建议关闭Windows防火墙或添加相机软件例外",
+                fix_command="control /name Microsoft.WindowsFirewall",
+                settings_url="control /name Microsoft.WindowsFirewall"
+            )
+        else:
+            return CheckItem(
+                title="Windows防火墙",
+                description="防火墙已关闭，相机通信正常",
+                status=CheckStatus.SUCCESS
+            )
+    
+    def check_network_adapter_power_management(self) -> CheckItem:
+        """检查网卡电源管理（休眠设置）"""
+        is_power_saving_enabled = False
         
-        return CheckItem(
-            title="GPU检查",
-            description=f"检测到: {gpu_info[0]}" if gpu_info else "未检测到独立GPU",
-            status=CheckStatus.SUCCESS if has_gpu else CheckStatus.WARNING
-        )
+        try:
+            # 检查网卡电源管理设置
+            result = subprocess.run(
+                ["powershell", "-Command", 
+                 "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Get-NetAdapterPowerManagement | Select-Object AllowComputerToTurnOffDevice"],
+                capture_output=True, text=True, timeout=10, shell=True
+            )
+            
+            if "Enabled" in result.stdout or "True" in result.stdout:
+                is_power_saving_enabled = True
+        except:
+            pass
+        
+        if is_power_saving_enabled:
+            return CheckItem(
+                title="网卡休眠设置",
+                description="网卡允许计算机关闭此设备以节约电源，可能导致相机断连",
+                status=CheckStatus.ERROR,
+                fix_suggestion="请禁用网卡电源管理：\n1. 打开设备管理器\n2. 找到网络适配器\n3. 右键属性 -> 电源管理\n4. 取消勾选"允许计算机关闭此设备以节约电源"",
+                fix_command="control /name Microsoft.DeviceManager",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
+        else:
+            return CheckItem(
+                title="网卡休眠设置",
+                description="网卡电源管理已禁用，不会自动休眠",
+                status=CheckStatus.SUCCESS
+            )
+    
+    def check_windows_update(self) -> CheckItem:
+        """检查 Windows 更新是否关闭"""
+        is_update_enabled = True
+        
+        try:
+            # 检查 Windows Update 服务状态
+            result = subprocess.run(
+                ["sc", "query", "wuauserv"],
+                capture_output=True, text=True, timeout=5, shell=True
+            )
+            
+            if "RUNNING" in result.stdout or "START_PENDING" in result.stdout:
+                is_update_enabled = True
+            elif "STOPPED" in result.stdout:
+                is_update_enabled = False
+        except:
+            pass
+        
+        if is_update_enabled:
+            return CheckItem(
+                title="Windows自动更新",
+                description="Windows自动更新已启用，可能在运行中自动重启影响生产",
+                status=CheckStatus.WARNING,
+                fix_suggestion="建议关闭Windows自动更新：\n1. 打开服务管理器\n2. 找到 Windows Update\n3. 设置为禁用",
+                fix_command="services.msc",
+                settings_url="ms-settings:windowsupdate"
+            )
+        else:
+            return CheckItem(
+                title="Windows自动更新",
+                description="Windows自动更新已禁用，不会自动重启",
+                status=CheckStatus.SUCCESS
+            )
+    
+    def check_jumbo_frame(self) -> CheckItem:
+        """检查网卡巨型帧(Jumbo Frame)设置"""
+        jumbo_frame_status = "unknown"
+        recommended_mtu = 9000
+        
+        try:
+            # 检查网卡 MTU 设置
+            result = subprocess.run(
+                ["powershell", "-Command", 
+                 "Get-NetAdapterAdvancedProperty | Where-Object {$_.DisplayName -like '*Jumbo*' -or $_.DisplayName -like '*MTU*'} | Select-Object Name, DisplayName, DisplayValue"],
+                capture_output=True, text=True, timeout=10, shell=True
+            )
+            
+            output = result.stdout
+            if "9014" in output or "9000" in output or "Jumbo Packet" in output:
+                jumbo_frame_status = "enabled"
+            elif "1514" in output or "1500" in output:
+                jumbo_frame_status = "disabled"
+        except:
+            pass
+        
+        if jumbo_frame_status == "enabled":
+            return CheckItem(
+                title="网卡巨型帧",
+                description="巨型帧已启用(MTU=9000)，适合GigE相机大数据传输",
+                status=CheckStatus.SUCCESS
+            )
+        elif jumbo_frame_status == "disabled":
+            return CheckItem(
+                title="网卡巨型帧",
+                description="巨型帧未启用(MTU=1500)，GigE相机传输效率较低",
+                status=CheckStatus.WARNING,
+                fix_suggestion="建议启用巨型帧以提高GigE相机传输效率：\n1. 打开设备管理器\n2. 找到网卡 -> 属性\n3. 高级 -> Jumbo Packet\n4. 设置为 9014 或 9000",
+                fix_command="control /name Microsoft.DeviceManager",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
+        else:
+            return CheckItem(
+                title="网卡巨型帧",
+                description="无法检测巨型帧设置，请手动检查网卡高级属性",
+                status=CheckStatus.WARNING,
+                fix_suggestion="请手动检查网卡高级属性中的 Jumbo Packet 设置",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
+    
+    def check_network_buffer(self) -> CheckItem:
+        """检查网卡传输接收缓冲区设置"""
+        buffer_status = "unknown"
+        
+        try:
+            # 检查网卡缓冲区设置
+            result = subprocess.run(
+                ["powershell", "-Command", 
+                 "Get-NetAdapterAdvancedProperty | Where-Object {$_.DisplayName -like '*Buffer*' -or $_.DisplayName -like '*Receive Buffers*' -or $_.DisplayName -like '*Transmit Buffers*'} | Select-Object Name, DisplayName, DisplayValue"],
+                capture_output=True, text=True, timeout=10, shell=True
+            )
+            
+            output = result.stdout
+            # 检查缓冲区是否设置为最大值或较大值
+            if output and ("512" in output or "1024" in output or "2048" in output or "Max" in output):
+                buffer_status = "optimized"
+            elif output:
+                buffer_status = "default"
+        except:
+            pass
+        
+        if buffer_status == "optimized":
+            return CheckItem(
+                title="网卡缓冲区",
+                description="网卡接收/传输缓冲区已优化设置",
+                status=CheckStatus.SUCCESS
+            )
+        elif buffer_status == "default":
+            return CheckItem(
+                title="网卡缓冲区",
+                description="网卡缓冲区使用默认设置，可能不适合高吞吐量相机",
+                status=CheckStatus.WARNING,
+                fix_suggestion="建议优化网卡缓冲区：\n1. 打开设备管理器\n2. 找到网卡 -> 属性\n3. 高级 -> Receive Buffers / Transmit Buffers\n4. 设置为最大值（如512或1024）",
+                fix_command="control /name Microsoft.DeviceManager",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
+        else:
+            return CheckItem(
+                title="网卡缓冲区",
+                description="无法检测缓冲区设置",
+                status=CheckStatus.WARNING,
+                fix_suggestion="请手动检查网卡高级属性",
+                settings_url="control /name Microsoft.DeviceManager"
+            )
     
     def export_report(self, file_path: str):
         """导出检测报告"""
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.write("=" * 60 + "\n")
-            f.write("   工业视觉运行环境检测报告\n")
-            f.write("=" * 60 + "\n\n")
+            f.write("=" * 70 + "\n")
+            f.write("        工业视觉运行环境检测报告\n")
+            f.write("=" * 70 + "\n\n")
             f.write(f"检测时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"操作系统: {platform.system()} {platform.release()}\n")
             f.write(f"平台: {platform.machine()}\n\n")
             
-            f.write("-" * 60 + "\n")
+            f.write("-" * 70 + "\n")
             f.write("检测结果:\n")
-            f.write("-" * 60 + "\n\n")
+            f.write("-" * 70 + "\n\n")
             
-            for i, item in enumerate(self.results, 1):
-                f.write(f"[{i}] {item.title}\n")
+            for item in self.results:
+                f.write(f"[{item.index}] {item.title}\n")
                 f.write(f"    状态: {item.status.value}\n")
-                f.write(f"    描述: {item.description}\n\n")
+                f.write(f"    描述: {item.description}\n")
+                if item.fix_suggestion:
+                    f.write(f"    建议: {item.fix_suggestion}\n")
+                f.write("\n")
             
             # 统计
             success = sum(1 for r in self.results if r.status == CheckStatus.SUCCESS)
             warning = sum(1 for r in self.results if r.status == CheckStatus.WARNING)
             error = sum(1 for r in self.results if r.status == CheckStatus.ERROR)
             
-            f.write("-" * 60 + "\n")
+            f.write("-" * 70 + "\n")
             f.write("统计:\n")
             f.write(f"  通过: {success} 项\n")
             f.write(f"  警告: {warning} 项\n")
             f.write(f"  错误: {error} 项\n")
-            f.write("=" * 60 + "\n")
+            f.write("=" * 70 + "\n")
