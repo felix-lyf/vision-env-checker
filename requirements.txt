@@ -1,0 +1,6 @@
+PyQt6>=6.6.0
+psutil>=5.9.0
+wmi>=1.5.1; platform_system=="Windows"
+py-cpuinfo>=9.0.0
+GPUtil>=1.4.0
+requests>=2.31.0
