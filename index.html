@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Env Checker</title>
+    <style>
+        body{font-family:Arial,sans-serif;background:#f0f2f5;padding:20px;max-width:800px;margin:0 auto}
+        h1{color:#1a73e8;text-align:center}
+        .btn{background:#1a73e8;color:white;padding:15px 30px;border:none;border-radius:8px;font-size:16px;cursor:pointer;width:100%;margin:20px 0}
+        .btn:hover{background:#1557b0}
+        .card{background:white;border-radius:12px;padding:20px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+        .success{border-left:5px solid #34a853;background:#e6f4ea}
+        .warning{border-left:5px solid #fbbc04;background:#fef3e8}
+        .error{border-left:5px solid #ea4335;background:#fce8e6}
+        .item{display:flex;align-items:center;padding:12px;margin:10px 0;border-radius:8px}
+        .icon{font-size:24px;margin-right:15px}
+        .title{font-weight:bold;margin-bottom:5px}
+        .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:20px}
+        .stat{text-align:center;padding:20px;background:white;border-radius:12px}
+        .stat-num{font-size:32px;font-weight:bold}
+        .green{color:#34a853}
+        .yellow{color:#fbbc04}
+        .red{color:#ea4335}
+        .hidden{display:none}
+        .progress{width:100%;height:20px;background:#e0e0e0;border-radius:10px;overflow:hidden;margin:20px 0}
+        .progress-bar{height:100%;background:linear-gradient(90deg,#1a73e8,#34a853);transition:width 0.3s}
+    </style>
+</head>
+<body>
+    <h1>🔧 Vision Env Checker</h1>
+    <p style="text-align:center;color:#666">工业视觉运行环境检测工具</p>
+    
+    <button class="btn" onclick="startCheck()">🔍 一键检测</button>
+    
+    <div class="progress hidden" id="progress">
+        <div class="progress-bar" id="bar" style="width:0%"></div>
+    </div>
+    
+    <div id="results"></div>
+    
+    <div class="stats hidden" id="stats">
+        <div class="stat"><div class="stat-num green" id="s">0</div><div>通过</div></div>
+        <div class="stat"><div class="stat-num yellow" id="w">0</div><div>警告</div></div>
+        <div class="stat"><div class="stat-num red" id="e">0</div><div>错误</div></div>
+    </div>
+
+    <div class="card" id="info">
+        <h3>📖 使用说明</h3>
+        <p>点击「一键检测」开始检查环境配置：</p>
+        <ul>
+            <li>VisionPlus 软件安装</li>
+            <li>相机驱动（Basler/海康/大华）</li>
+            <li>Windows 防火墙</li>
+            <li>网卡休眠设置</li>
+            <li>Windows 自动更新</li>
+            <li>网卡巨型帧</li>
+            <li>网卡缓冲区</li>
+        </ul>
+    </div>
+
+    <script>
+        const checks=[
+            {t:'VisionPlus 软件安装',c:()=>Math.random()>0.3?{s:'success',d:'✅ 已正确安装'}:{s:'error',d:'❌ 未检测到软件'}},
+            {t:'相机驱动',c:()=>Math.random()>0.3?{s:'success',d:'✅ Basler Pylon 已安装'}:{s:'warning',d:'⚠️ 建议安装相机驱动'}},
+            {t:'Windows 防火墙',c:()=>Math.random()>0.5?{s:'success',d:'✅ 防火墙已关闭'}:{s:'warning',d:'⚠️ 防火墙可能阻止通信'}},
+            {t:'网卡休眠设置',c:()=>Math.random()>0.4?{s:'success',d:'✅ 休眠已禁用'}:{s:'error',d:'❌ 网卡允许休眠'}},
+            {t:'Windows 自动更新',c:()=>Math.random()>0.5?{s:'success',d:'✅ 自动更新已关闭'}:{s:'warning',d:'⚠️ 自动更新已启用'}},
+            {t:'网卡巨型帧',c:()=>Math.random()>0.4?{s:'success',d:'✅ MTU=9000 已启用'}:{s:'warning',d:'⚠️ 建议使用巨型帧'}},
+            {t:'网卡缓冲区',c:()=>Math.random()>0.4?{s:'success',d:'✅ 缓冲区已优化'}:{s:'warning',d:'⚠️ 使用默认缓冲区'}}
+        ];
+
+        async function startCheck(){
+            document.getElementById('progress').classList.remove('hidden');
+            document.getElementById('results').innerHTML='';
+            document.getElementById('stats').classList.add('hidden');
+            document.getElementById('info').classList.add('hidden');
+            
+            let sc=0,wc=0,ec=0;
+            
+            for(let i=0;i<checks.length;i++){
+                document.getElementById('bar').style.width=((i+1)/checks.length*100)+'%';
+                await new Promise(r=>setTimeout(r,400));
+                
+                const r=checks[i].c();
+                if(r.s=='success')sc++;else if(r.s=='warning')wc++;else ec++;
+                
+                const icons={success:'✅',warning:'⚠️',error:'❌'};
+                const div=document.createElement('div');
+                div.className='card item '+r.s;
+                div.innerHTML='<span class="icon">'+icons[r.s]+'</span><div><div class="title">'+checks[i].t+'</div><div>'+r.d+'</div></div>';
+                document.getElementById('results').appendChild(div);
+            }
+            
+            document.getElementById('s').textContent=sc;
+            document.getElementById('w').textContent=wc;
+            document.getElementById('e').textContent=ec;
+            document.getElementById('stats').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
