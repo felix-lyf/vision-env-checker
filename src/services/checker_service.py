@@ -248,7 +248,7 @@ class CheckerService:
                 # 检查 Windows Security Center
                 result = subprocess.run(
                     ["powershell", "-Command", 
-                     "Get-WmiObject -Namespace 'root\SecurityCenter2' -Class AntiVirusProduct | Select-Object displayName"],
+                     "Get-WmiObject -Namespace 'root\\SecurityCenter2' -Class AntiVirusProduct | Select-Object displayName"],
                     capture_output=True,
                     text=True,
                     timeout=10
