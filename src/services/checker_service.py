@@ -189,7 +189,7 @@ class CheckerService:
                 title="网卡休眠设置",
                 description="网卡允许计算机关闭此设备以节约电源，可能导致相机断连",
                 status=CheckStatus.ERROR,
-                fix_suggestion="请禁用网卡电源管理：\n1. 打开设备管理器\n2. 找到网络适配器\n3. 右键属性 -> 电源管理\n4. 取消勾选"允许计算机关闭此设备以节约电源"",
+                fix_suggestion='请禁用网卡电源管理：\n1. 打开设备管理器\n2. 找到网络适配器\n3. 右键属性 -> 电源管理\n4. 取消勾选"允许计算机关闭此设备以节约电源"',
                 fix_command="control /name Microsoft.DeviceManager",
                 settings_url="control /name Microsoft.DeviceManager"
             )
